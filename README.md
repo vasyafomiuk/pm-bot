@@ -66,18 +66,36 @@ A powerful Slack bot that acts as an AI-powered project manager for agile teams.
    cd pm-bot
    ```
 
-2. **Install dependencies:**
+2. **Install uv (if not already installed):**
    ```bash
-   pip install -r requirements.txt
+   # On macOS and Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   
+   # On Windows
+   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+   
+   # Or with pip
+   pip install uv
    ```
 
-3. **Configure environment variables:**
+3. **Install dependencies with uv:**
    ```bash
-   cp env.example .env
+   # Create virtual environment and install dependencies
+   uv venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   uv pip install -r requirements.txt
+   
+   # Or install directly from pyproject.toml
+   uv pip install -e .
+   ```
+
+4. **Configure environment variables:**
+   ```bash
+   cp environment.template.txt .env
    # Edit .env with your configuration
    ```
 
-4. **Set up Slack Bot:**
+5. **Set up Slack Bot:**
    - Create a new Slack app at https://api.slack.com/apps
    - Enable Socket Mode
    - Add the following OAuth scopes:
@@ -87,11 +105,11 @@ A powerful Slack bot that acts as an AI-powered project manager for agile teams.
    - Create a slash command: `/create-epic`
    - Install the app to your workspace
 
-5. **Configure Jira:**
+6. **Configure Jira:**
    - Generate an API token in Jira
    - Note your Jira server URL and project key
 
-6. **Run the bot:**
+7. **Run the bot:**
    ```bash
    python main.py
    ```
@@ -100,96 +118,133 @@ A powerful Slack bot that acts as an AI-powered project manager for agile teams.
 
 ### Quick Start with Docker
 
-1. **Build and run with Docker:**
-   ```bash
-   ./docker-run.sh build
-   ./docker-run.sh run
-   ```
-
-2. **Or use Docker Compose (starts both MCP server and bot):**
-   ```bash
-   ./docker-run.sh compose
-   ```
-
-3. **View logs:**
-   ```bash
-   ./docker-run.sh logs                    # Bot logs
-   docker logs mcp-atlassian              # MCP server logs
-   ```
-
-### Docker Commands
-
-The `docker-run.sh` script provides easy management:
-
+**🚀 Super Quick Start (Recommended):**
 ```bash
-# Build the image
-./docker-run.sh build
+# One-command setup and run (builds image, validates config, starts bot)
+./quick_docker_start.sh
+```
 
-# Run the container
-./docker-run.sh run
+**Advanced Options:**
+```bash
+# Run with advanced options
+./run_docker.sh --mode minimal --build
 
+# Use docker-compose for service management
+./docker_compose_run.sh up
+```
+
+### Available Docker Scripts
+
+#### 1. Quick Docker Start 
+```bash
+./quick_docker_start.sh
+```
+- **Best for**: First-time setup and testing
+- **Features**: Automatic environment setup, credential validation, build and run
+- **Mode**: Minimal (Slack + OpenAI only)
+
+#### 2. Advanced Docker Runner
+```bash
+./run_docker.sh [OPTIONS]
+```
+**Options:**
+- `--mode minimal` - Run with Slack + OpenAI only (default)
+- `--mode full` - Run with all services (requires Jira credentials)
+- `--mode test` - Run epic creation test
+- `--build` - Build image before running
+- `--rebuild` - Force rebuild (no cache)
+- `--logs` - Show container logs
+- `--stop` - Stop running container
+- `--help` - Show help
+
+**Examples:**
+```bash
+# Run in minimal mode with fresh build
+./run_docker.sh --mode minimal --build
+
+# View logs
+./run_docker.sh --logs
+
+# Stop the bot
+./run_docker.sh --stop
+```
+
+#### 3. Docker Compose Runner
+```bash
+./docker_compose_run.sh [COMMAND]
+```
+**Commands:**
+- `up` - Start services (default)
+- `down` - Stop and remove services
+- `build` - Build images
+- `logs` - Show logs
+- `status` - Show service status
+
+**Examples:**
+```bash
 # Start with docker-compose
-./docker-run.sh compose
+./docker_compose_run.sh up
+
+# View logs
+./docker_compose_run.sh logs
 
 # Stop services
-./docker-run.sh down
-
-# Test configuration
-./docker-run.sh test
-
-# View logs
-./docker-run.sh logs
-
-# Check status
-./docker-run.sh status
-
-# Restart container
-./docker-run.sh restart
-
-# Access container shell
-./docker-run.sh shell
-
-# Clean up everything
-./docker-run.sh clean
+./docker_compose_run.sh down
 ```
 
-### Manual Docker Commands
+### 📚 Comprehensive Docker Guide
 
-If you prefer manual Docker commands:
+For detailed Docker instructions, troubleshooting, and advanced configurations, see:
 
-```bash
-# Build the image
-docker build -t pm-bot .
+**[🐳 DOCKER_GUIDE.md](DOCKER_GUIDE.md)** - Complete Docker reference
 
-# Run the container
-docker run -d \
-  --name project-management-bot \
-  --env-file .env \
-  -v $(pwd)/logs:/app/logs:rw \
-  --restart unless-stopped \
-  pm-bot
+**[🔗 MCP_ATLASSIAN_SSE_SETUP.md](MCP_ATLASSIAN_SSE_SETUP.md)** - MCP Atlassian SSE integration guide
 
-# View logs
-docker logs -f project-management-bot
-
-# Stop container
-docker stop project-management-bot
-```
+The guides cover:
+- ✅ All running methods (quick start, advanced, compose, manual)
+- ✅ MCP Atlassian Server-Sent Events (SSE) integration
+- ✅ Configuration and environment setup
+- ✅ Monitoring and management
+- ✅ Troubleshooting common issues
+- ✅ Production deployment
+- ✅ Volume mounts and persistence
 
 ### Docker Environment
 
 The Docker setup includes:
 
+- **UV package manager** for 10x faster builds
 - **Multi-stage build** for optimized image size
 - **Non-root user** for security
-- **Health checks** for monitoring
 - **Volume mounts** for persistent logs
-- **Resource limits** for production use
+- **Environment file support** for easy configuration
 - **Automatic restarts** on failure
+- **Minimal and full modes** for different use cases
 
 ## Configuration ⚙️
 
-Create a `.env` file with the following variables:
+### 📚 Detailed Setup Instructions
+
+For comprehensive guides on generating credentials for each service, see the **[instructions/](instructions/)** folder:
+
+- **[🚀 Quick Start Guide](instructions/README.md)** - Overview and setup order
+- **[💬 Slack Credentials](instructions/slack-credentials.md)** - Bot setup and tokens
+- **[🎯 Jira Credentials](instructions/jira-credentials.md)** - API tokens and permissions
+- **[🤖 Azure OpenAI Credentials](instructions/azure-openai-credentials.md)** - Enterprise AI setup
+- **[📅 Google Credentials](instructions/google-credentials.md)** - Calendar and Drive access
+
+### Environment Setup
+
+1. **Copy the environment template:**
+   ```bash
+   cp environment.template.txt .env
+   ```
+
+2. **Edit the `.env` file** with your actual credentials and configuration values.
+
+### Required Environment Variables
+
+The following variables are required for basic functionality:
 
 ```env
 # Slack Configuration
@@ -201,7 +256,17 @@ SLACK_APP_TOKEN=xapp-your-slack-app-token
 OPENAI_API_KEY=your-openai-api-key
 OPENAI_MODEL=gpt-4
 
-# Azure OpenAI Configuration (optional)
+# Jira Configuration
+JIRA_SERVER=https://your-domain.atlassian.net
+JIRA_USERNAME=your-email@company.com
+JIRA_API_TOKEN=your-jira-api-token
+JIRA_PROJECT_KEY=PROJ
+```
+
+### Optional Environment Variables
+
+```env
+# Azure OpenAI Configuration (alternative to OpenAI)
 USE_AZURE_OPENAI=false
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=your-azure-openai-api-key
@@ -212,37 +277,63 @@ AZURE_OPENAI_DEPLOYMENT=your-deployment-name
 AGENT_MAX_ITERATIONS=5
 AGENT_TEMPERATURE=0.7
 
-# Jira Configuration
-JIRA_SERVER=https://your-domain.atlassian.net
-JIRA_USERNAME=your-email@company.com
-JIRA_API_TOKEN=your-jira-api-token
-JIRA_PROJECT_KEY=PROJ
-
-# Confluence Configuration (optional)
+# Confluence Configuration
 CONFLUENCE_URL=https://your-domain.atlassian.net/wiki
 
-# Atlassian MCP Configuration
-MCP_SERVER_URL=http://mcp-atlassian:9000
-ATLASSIAN_OAUTH_TOKEN=your-oauth-token (optional, for OAuth)
-ATLASSIAN_OAUTH_CLIENT_ID=your-oauth-client-id (optional)
-ATLASSIAN_OAUTH_CLIENT_SECRET=your-oauth-client-secret (optional)
-ATLASSIAN_CLOUD_ID=your-cloud-id (optional)
+# Atlassian OAuth Configuration (for multi-user setups)
+ATLASSIAN_OAUTH_CLIENT_ID=your-oauth-client-id
+ATLASSIAN_OAUTH_CLIENT_SECRET=your-oauth-client-secret
+ATLASSIAN_OAUTH_TOKEN=your-oauth-token
+ATLASSIAN_CLOUD_ID=your-cloud-id
 
-# Optional
+# Google Meet Integration
+GOOGLE_CREDENTIALS_FILE=credentials.json
+GOOGLE_TOKEN_FILE=token.json
+GOOGLE_MEETING_LOOKBACK_DAYS=7
+
+# Application Configuration
 PORT=3000
 LOG_LEVEL=INFO
 MCP_LOG_LEVEL=INFO
 ```
 
+### Docker Environment
+
+The Docker Compose setup automatically uses the `.env` file. Just ensure your `.env` file is properly configured before running:
+
+```bash
+docker-compose up -d
+```
+
+For a complete list of all available environment variables with descriptions, see the `environment.template.txt` file.
+
 ## Atlassian MCP Integration 🔗
 
 This bot uses the [mcp-atlassian](https://github.com/sooperset/mcp-atlassian) server for robust integration with Jira and Confluence. The MCP server provides:
 
+- **Server-Sent Events (SSE)**: Real-time communication via streamable-HTTP transport
 - **Multiple Authentication Methods**: API tokens, OAuth 2.0, Personal Access Tokens
 - **Comprehensive Jira Tools**: Create issues, search, update, transitions, linking
 - **Confluence Support**: Create and update pages, search content
 - **Multi-User Support**: Each user can authenticate independently
 - **Cloud & Server Support**: Works with Atlassian Cloud and Server/Data Center
+- **Docker Integration**: Automatic service discovery and health monitoring
+
+### Docker Compose Integration
+
+The PM Bot includes full MCP Atlassian integration with docker-compose:
+
+```bash
+# Start both PM Bot and MCP Atlassian services
+./docker_compose_run.sh up
+
+# Services automatically configured:
+# - PM Bot: http://localhost:3000
+# - MCP Atlassian: http://localhost:9000 (SSE mode)
+# - Health checks and service dependencies
+```
+
+**See [MCP_ATLASSIAN_SSE_SETUP.md](MCP_ATLASSIAN_SSE_SETUP.md) for complete setup instructions.**
 
 ### Authentication Options
 
@@ -547,7 +638,7 @@ Customize message formatting in `SlackService`:
    - Verify API tokens and credentials
    - Check OAuth scopes for Slack bot
    - Ensure Atlassian permissions are correct
-   - Test MCP server connectivity: `curl http://localhost:9000/health`
+   - Test MCP server connectivity: `curl http://localhost:9000/healthz`
 
 2. **Connection Issues**
    - Verify network connectivity between containers

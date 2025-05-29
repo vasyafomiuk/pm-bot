@@ -8,7 +8,6 @@ from azure.ai.inference.aio import ChatCompletionsClient
 from azure.ai.inference.models import SystemMessage, UserMessage, AssistantMessage
 from azure.core.credentials import AzureKeyCredential
 import autogen
-from agents import Agent, MultiAgentSystem
 from config import settings
 from models import UserStory, AcceptanceCriteria
 
@@ -647,4 +646,155 @@ class OpenAIService:
                 await self.client.close()
             logger.info("AI service resources cleaned up")
         except Exception as e:
-            logger.error(f"Error cleaning up AI service: {str(e)}") 
+            logger.error(f"Error cleaning up AI service: {str(e)}")
+    
+    async def analyze_documents_for_epics(
+        self, 
+        combined_content: str, 
+        project_context: str = ""
+    ) -> List[Dict[str, Any]]:
+        """
+        Analyze document content to generate epic proposals
+        
+        Args:
+            combined_content: Combined content from various documents
+            project_context: Additional project context
+            
+        Returns:
+            List of epic proposals
+        """
+        try:
+            system_prompt = """You are an expert product manager and technical architect.
+            Analyze the provided documents (HLDs, PRDs, meeting notes) and extract actionable epics.
+            
+            Guidelines:
+            - Identify major product capabilities and technical components
+            - Create epics that are substantial but achievable
+            - Each epic should represent a complete feature or system component
+            - Include technical requirements and business value
+            - Generate 2-6 epics based on the document content
+            - Ensure epics are aligned with the project goals mentioned in the documents
+            
+            Output a JSON array with epic proposals in this exact format:
+            [
+                {
+                    "title": "Epic title",
+                    "description": "Detailed epic description including business value and technical overview",
+                    "features": ["feature1", "feature2", "feature3"],
+                    "acceptance_criteria": ["criteria1", "criteria2"],
+                    "priority": "High/Medium/Low",
+                    "labels": ["label1", "label2"]
+                }
+            ]"""
+            
+            user_prompt = f"""
+            Project Context: {project_context}
+            
+            Document Content:
+            {combined_content}
+            
+            Analyze these documents and generate epic proposals:
+            """
+            
+            # Use the feature agent's execute_task method for consistency
+            response = await self.feature_agent.execute_task(system_prompt, user_prompt)
+            
+            # Parse the response
+            return self._parse_epic_proposals(response)
+            
+        except Exception as e:
+            logger.error(f"Error analyzing documents for epics: {str(e)}")
+            return []
+    
+    async def regenerate_epics_with_feedback(
+        self, 
+        original_proposals: List[Dict[str, Any]], 
+        feedback: str,
+        project_context: str = ""
+    ) -> List[Dict[str, Any]]:
+        """
+        Regenerate epic proposals based on user feedback
+        
+        Args:
+            original_proposals: Original epic proposals
+            feedback: User's feedback for improvements
+            project_context: Additional project context
+            
+        Returns:
+            Updated list of epic proposals
+        """
+        try:
+            system_prompt = """You are an expert product manager revising epic proposals based on feedback.
+            
+            Guidelines:
+            - Carefully consider the user's feedback and apply it to improve the epics
+            - Maintain the overall structure but adjust based on the feedback
+            - Add, remove, or modify epics as requested
+            - Ensure the revised epics still maintain technical accuracy and business value
+            - Keep the same JSON format for consistency
+            
+            Output a JSON array with revised epic proposals."""
+            
+            # Format original proposals for context
+            original_json = json.dumps(original_proposals, indent=2)
+            
+            user_prompt = f"""
+            Project Context: {project_context}
+            
+            Original Epic Proposals:
+            {original_json}
+            
+            User Feedback:
+            {feedback}
+            
+            Generate revised epic proposals based on this feedback:
+            """
+            
+            # Use the feature agent's execute_task method
+            response = await self.feature_agent.execute_task(system_prompt, user_prompt)
+            
+            # Parse the response
+            return self._parse_epic_proposals(response)
+            
+        except Exception as e:
+            logger.error(f"Error regenerating epics with feedback: {str(e)}")
+            return original_proposals  # Return original if regeneration fails
+    
+    def _parse_epic_proposals(self, content: str) -> List[Dict[str, Any]]:
+        """Parse epic proposals from AI response"""
+        try:
+            # Try to extract JSON array from the response
+            json_start = content.find('[')
+            json_end = content.rfind(']') + 1
+            
+            if json_start >= 0 and json_end > json_start:
+                json_content = content[json_start:json_end]
+                proposals = json.loads(json_content)
+                
+                # Validate and clean up proposals
+                valid_proposals = []
+                for proposal in proposals:
+                    if isinstance(proposal, dict) and 'title' in proposal and 'description' in proposal:
+                        # Ensure all fields have default values
+                        clean_proposal = {
+                            'title': proposal.get('title', 'Untitled Epic'),
+                            'description': proposal.get('description', ''),
+                            'features': proposal.get('features', []),
+                            'acceptance_criteria': proposal.get('acceptance_criteria', []),
+                            'priority': proposal.get('priority', 'Medium'),
+                            'labels': proposal.get('labels', [])
+                        }
+                        valid_proposals.append(clean_proposal)
+                
+                return valid_proposals
+            
+            else:
+                logger.error("No valid JSON array found in epic proposals response")
+                return []
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing epic proposals JSON: {str(e)}")
+            return []
+        except Exception as e:
+            logger.error(f"Error parsing epic proposals: {str(e)}")
+            return [] 

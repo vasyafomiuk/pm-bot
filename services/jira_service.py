@@ -9,45 +9,29 @@ logger = logging.getLogger(__name__)
 
 
 class JiraService:
-    """Service for interacting with Jira through Atlassian MCP Server"""
+    """Service for interacting with Jira through MCP Atlassian Server"""
     
     def __init__(self):
         self.mcp_base_url = settings.mcp_server_url or "http://mcp-atlassian:9000"
         self.mcp_endpoint = f"{self.mcp_base_url}/mcp"
-        self.auth_headers = self._get_auth_headers()
         self._initialize_client()
     
-    def _get_auth_headers(self) -> Dict[str, str]:
-        """Get authentication headers for MCP requests"""
-        headers = {"Content-Type": "application/json"}
-        
-        # Add authentication based on available credentials
-        if settings.jira_api_token:
-            # For Atlassian Cloud with API token
-            auth_token = f"Bearer {settings.jira_api_token}"
-            headers["Authorization"] = auth_token
-        elif hasattr(settings, 'atlassian_oauth_token'):
-            # For OAuth authentication
-            headers["Authorization"] = f"Bearer {settings.atlassian_oauth_token}"
-        
-        return headers
-    
     def _initialize_client(self):
-        """Initialize MCP client"""
+        """Initialize HTTP client for MCP communication"""
         try:
             self.client = httpx.AsyncClient(
                 base_url=self.mcp_base_url,
-                headers=self.auth_headers,
-                timeout=30.0
+                headers={"Content-Type": "application/json"},
+                timeout=60.0
             )
-            logger.info("Successfully initialized Atlassian MCP client")
+            logger.info("Successfully initialized MCP Atlassian client")
             
         except Exception as e:
             logger.error(f"Failed to initialize MCP client: {str(e)}")
             raise
     
     async def _call_mcp_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Call an MCP tool and return the result"""
+        """Call an MCP tool via HTTP and return the result"""
         try:
             payload = {
                 "jsonrpc": "2.0",
@@ -59,22 +43,28 @@ class JiraService:
                 }
             }
             
+            logger.debug(f"Calling MCP tool {tool_name} with arguments: {arguments}")
+            
             response = await self.client.post("/mcp", json=payload)
             response.raise_for_status()
             
             result = response.json()
             if "error" in result:
-                raise Exception(f"MCP Error: {result['error']}")
+                error_msg = result["error"].get("message", str(result["error"]))
+                raise Exception(f"MCP Error: {error_msg}")
             
             return result.get("result", {})
             
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error calling MCP tool {tool_name}: {e.response.status_code} - {e.response.text}")
+            raise Exception(f"HTTP error: {e.response.status_code}")
         except Exception as e:
             logger.error(f"Error calling MCP tool {tool_name}: {str(e)}")
             raise
 
     async def create_epic(self, epic_request: EpicRequest) -> Epic:
         """
-        Create an epic in Jira using MCP
+        Create an epic in Jira using MCP Atlassian
         
         Args:
             epic_request: Epic creation request
@@ -96,19 +86,14 @@ class JiraService:
             if epic_request.labels:
                 epic_args["labels"] = epic_request.labels
             
-            # Add epic name (required for epics)
+            # Add epic name (required for epics in Jira)
             epic_args["epic_name"] = epic_request.title
             
             # Call MCP tool to create issue
             result = await self._call_mcp_tool("jira_create_issue", epic_args)
             
-            # Extract issue information from result
-            if "content" in result and isinstance(result["content"], list):
-                content_text = result["content"][0].get("text", "")
-                # Parse the response to extract issue key and other details
-                issue_data = self._parse_issue_creation_response(content_text)
-            else:
-                issue_data = result
+            # Parse the response
+            issue_data = self._parse_tool_response(result)
             
             # Convert to Epic model
             epic = Epic(
@@ -129,29 +114,9 @@ class JiraService:
             logger.error(f"Error creating epic: {str(e)}")
             raise
     
-    def _parse_issue_creation_response(self, response_text: str) -> Dict[str, Any]:
-        """Parse issue creation response from MCP"""
-        try:
-            # Look for issue key pattern in response
-            import re
-            key_match = re.search(r'\b[A-Z][A-Z0-9_]*-\d+\b', response_text)
-            
-            issue_data = {}
-            if key_match:
-                issue_data["key"] = key_match.group()
-                # Extract other information if available
-                if "successfully created" in response_text.lower():
-                    issue_data["status"] = "To Do"
-            
-            return issue_data
-            
-        except Exception as e:
-            logger.error(f"Error parsing issue creation response: {str(e)}")
-            return {}
-    
     async def create_user_story(self, user_story: UserStory, epic_key: str) -> UserStory:
         """
-        Create a user story in Jira and link it to an epic using MCP
+        Create a user story in Jira and link it to an epic using MCP Atlassian
         
         Args:
             user_story: User story to create
@@ -188,12 +153,8 @@ class JiraService:
             # Create the user story
             result = await self._call_mcp_tool("jira_create_issue", story_args)
             
-            # Extract issue information from result
-            if "content" in result and isinstance(result["content"], list):
-                content_text = result["content"][0].get("text", "")
-                issue_data = self._parse_issue_creation_response(content_text)
-            else:
-                issue_data = result
+            # Parse the response
+            issue_data = self._parse_tool_response(result)
             
             # Link to epic if story was created successfully
             if issue_data.get("key"):
@@ -213,11 +174,11 @@ class JiraService:
             raise
     
     async def _link_story_to_epic(self, story_key: str, epic_key: str):
-        """Link a user story to an epic using MCP"""
+        """Link a user story to an epic using MCP Atlassian"""
         try:
             # Use MCP tool to link story to epic
             link_args = {
-                "story_key": story_key,
+                "issue_key": story_key,
                 "epic_key": epic_key
             }
             
@@ -230,7 +191,7 @@ class JiraService:
     
     async def get_epic(self, epic_key: str) -> Optional[Epic]:
         """
-        Retrieve an epic from Jira using MCP
+        Retrieve an epic from Jira using MCP Atlassian
         
         Args:
             epic_key: Epic key to retrieve
@@ -242,12 +203,8 @@ class JiraService:
             get_args = {"issue_key": epic_key}
             result = await self._call_mcp_tool("jira_get_issue", get_args)
             
-            # Parse the result
-            if "content" in result and isinstance(result["content"], list):
-                content_text = result["content"][0].get("text", "")
-                issue_data = self._parse_issue_response(content_text)
-            else:
-                issue_data = result
+            # Parse the response
+            issue_data = self._parse_tool_response(result)
             
             if not issue_data:
                 return None
@@ -269,46 +226,9 @@ class JiraService:
             logger.error(f"Error retrieving epic {epic_key}: {str(e)}")
             return None
     
-    def _parse_issue_response(self, response_text: str) -> Dict[str, Any]:
-        """Parse issue response from MCP"""
-        try:
-            issue_data = {}
-            
-            # Extract key
-            import re
-            key_match = re.search(r'Key:\s*([A-Z][A-Z0-9_]*-\d+)', response_text)
-            if key_match:
-                issue_data["key"] = key_match.group(1)
-            
-            # Extract summary/title
-            summary_match = re.search(r'Summary:\s*(.+)', response_text)
-            if summary_match:
-                issue_data["summary"] = summary_match.group(1).strip()
-            
-            # Extract status
-            status_match = re.search(r'Status:\s*(.+)', response_text)
-            if status_match:
-                issue_data["status"] = status_match.group(1).strip()
-            
-            # Extract priority
-            priority_match = re.search(r'Priority:\s*(.+)', response_text)
-            if priority_match:
-                issue_data["priority"] = priority_match.group(1).strip()
-            
-            # Extract description
-            desc_match = re.search(r'Description:\s*(.+?)(?=\n[A-Z][a-z]+:|$)', response_text, re.DOTALL)
-            if desc_match:
-                issue_data["description"] = desc_match.group(1).strip()
-            
-            return issue_data
-            
-        except Exception as e:
-            logger.error(f"Error parsing issue response: {str(e)}")
-            return {}
-    
     async def get_epic_stories(self, epic_key: str) -> List[UserStory]:
         """
-        Get all user stories linked to an epic using MCP
+        Get all user stories linked to an epic using MCP Atlassian
         
         Args:
             epic_key: Epic key
@@ -325,25 +245,22 @@ class JiraService:
             
             result = await self._call_mcp_tool("jira_search", search_args)
             
-            # Parse the result
-            if "content" in result and isinstance(result["content"], list):
-                content_text = result["content"][0].get("text", "")
-                stories_data = self._parse_search_response(content_text)
-            else:
-                stories_data = result.get("issues", [])
+            # Parse the response
+            search_data = self._parse_tool_response(result)
+            issues = search_data.get("issues", [])
             
             user_stories = []
-            for story_data in stories_data:
+            for issue_data in issues:
                 story = UserStory(
-                    key=story_data.get("key"),
-                    id=story_data.get("id"),
-                    title=story_data.get("summary", ""),
-                    description=story_data.get("description", ""),
+                    key=issue_data.get("key"),
+                    id=issue_data.get("id"),
+                    title=issue_data.get("summary", ""),
+                    description=issue_data.get("description", ""),
                     epic_key=epic_key,
-                    status=story_data.get("status", ""),
-                    priority=story_data.get("priority", ""),
-                    assignee=story_data.get("assignee"),
-                    labels=story_data.get("labels", [])
+                    status=issue_data.get("status", ""),
+                    priority=issue_data.get("priority", ""),
+                    assignee=issue_data.get("assignee"),
+                    labels=issue_data.get("labels", [])
                 )
                 user_stories.append(story)
             
@@ -353,32 +270,9 @@ class JiraService:
             logger.error(f"Error retrieving stories for epic {epic_key}: {str(e)}")
             return []
     
-    def _parse_search_response(self, response_text: str) -> List[Dict[str, Any]]:
-        """Parse search response from MCP"""
-        try:
-            stories = []
-            
-            # Split response by issues (assuming each issue starts with a key pattern)
-            import re
-            issue_blocks = re.split(r'\n(?=[A-Z][A-Z0-9_]*-\d+)', response_text)
-            
-            for block in issue_blocks:
-                if not block.strip():
-                    continue
-                
-                story_data = self._parse_issue_response(block)
-                if story_data and story_data.get("key"):
-                    stories.append(story_data)
-            
-            return stories
-            
-        except Exception as e:
-            logger.error(f"Error parsing search response: {str(e)}")
-            return []
-    
     async def update_epic_status(self, epic_key: str, status: str) -> bool:
         """
-        Update epic status using MCP
+        Update epic status using MCP Atlassian
         
         Args:
             epic_key: Epic key
@@ -388,14 +282,10 @@ class JiraService:
             True if successful, False otherwise
         """
         try:
-            # Get available transitions first
-            get_transitions_args = {"issue_key": epic_key}
-            transitions_result = await self._call_mcp_tool("jira_get_transitions", get_transitions_args)
-            
             # Try to transition the issue
             transition_args = {
                 "issue_key": epic_key,
-                "status": status
+                "transition": status
             }
             
             await self._call_mcp_tool("jira_transition_issue", transition_args)
@@ -409,12 +299,12 @@ class JiraService:
     async def create_confluence_page(self, space_key: str, title: str, content: str, 
                                    parent_page_id: str = None, labels: List[str] = None) -> Dict[str, Any]:
         """
-        Create a Confluence page using MCP
+        Create a Confluence page using MCP Atlassian
         
         Args:
             space_key: Confluence space key
             title: Page title
-            content: Page content in Confluence format
+            content: Page content
             parent_page_id: Optional parent page ID
             labels: Optional list of labels
             
@@ -425,8 +315,7 @@ class JiraService:
             page_args = {
                 "space_key": space_key,
                 "title": title,
-                "content": content,
-                "content_format": "wiki"  # Using wiki markup format
+                "content": content
             }
             
             if parent_page_id:
@@ -437,12 +326,8 @@ class JiraService:
             
             result = await self._call_mcp_tool("confluence_create_page", page_args)
             
-            # Parse the result
-            if "content" in result and isinstance(result["content"], list):
-                content_text = result["content"][0].get("text", "")
-                page_data = self._parse_confluence_page_response(content_text)
-            else:
-                page_data = result
+            # Parse the response
+            page_data = self._parse_tool_response(result)
             
             logger.info(f"Successfully created Confluence page: {title}")
             return page_data
@@ -454,7 +339,7 @@ class JiraService:
     async def update_confluence_page(self, page_id: str, title: str, content: str, 
                                    version: int = None) -> Dict[str, Any]:
         """
-        Update an existing Confluence page using MCP
+        Update an existing Confluence page using MCP Atlassian
         
         Args:
             page_id: Page ID to update
@@ -469,8 +354,7 @@ class JiraService:
             update_args = {
                 "page_id": page_id,
                 "title": title,
-                "content": content,
-                "content_format": "wiki"
+                "content": content
             }
             
             if version:
@@ -478,12 +362,8 @@ class JiraService:
             
             result = await self._call_mcp_tool("confluence_update_page", update_args)
             
-            # Parse the result
-            if "content" in result and isinstance(result["content"], list):
-                content_text = result["content"][0].get("text", "")
-                page_data = self._parse_confluence_page_response(content_text)
-            else:
-                page_data = result
+            # Parse the response
+            page_data = self._parse_tool_response(result)
             
             logger.info(f"Successfully updated Confluence page: {title}")
             return page_data
@@ -494,7 +374,7 @@ class JiraService:
     
     async def search_confluence_pages(self, space_key: str, query: str) -> List[Dict[str, Any]]:
         """
-        Search for Confluence pages using MCP
+        Search for Confluence pages using MCP Atlassian
         
         Args:
             space_key: Confluence space key
@@ -505,18 +385,15 @@ class JiraService:
         """
         try:
             search_args = {
-                "space_key": space_key,
-                "query": query
+                "cql": f'space = "{space_key}" AND text ~ "{query}"',
+                "limit": 50
             }
             
             result = await self._call_mcp_tool("confluence_search", search_args)
             
-            # Parse the result
-            if "content" in result and isinstance(result["content"], list):
-                content_text = result["content"][0].get("text", "")
-                pages = self._parse_confluence_search_response(content_text)
-            else:
-                pages = result.get("pages", [])
+            # Parse the response
+            search_data = self._parse_tool_response(result)
+            pages = search_data.get("results", [])
             
             logger.info(f"Found {len(pages)} Confluence pages matching '{query}'")
             return pages
@@ -527,110 +404,88 @@ class JiraService:
     
     async def get_confluence_spaces(self) -> List[Dict[str, Any]]:
         """
-        Get available Confluence spaces using MCP
+        Get available Confluence spaces using MCP Atlassian
         
         Returns:
             List of available spaces
         """
         try:
-            result = await self._call_mcp_tool("confluence_get_spaces", {})
-            
-            # Parse the result
-            if "content" in result and isinstance(result["content"], list):
-                content_text = result["content"][0].get("text", "")
-                spaces = self._parse_confluence_spaces_response(content_text)
-            else:
-                spaces = result.get("spaces", [])
-            
-            logger.info(f"Retrieved {len(spaces)} Confluence spaces")
-            return spaces
+            # Note: This would require a specific tool for getting spaces
+            # For now, return empty list as this functionality may not be available
+            logger.warning("get_confluence_spaces not implemented in MCP Atlassian")
+            return []
                 
         except Exception as e:
             logger.error(f"Error getting Confluence spaces: {str(e)}")
             return []
     
-    def _parse_confluence_page_response(self, response_text: str) -> Dict[str, Any]:
-        """Parse Confluence page response from MCP"""
+    def _parse_tool_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse tool response from MCP Atlassian"""
         try:
-            page_data = {}
+            # MCP Atlassian returns responses in different formats
+            # Check for content array first (common format)
+            if "content" in response and isinstance(response["content"], list):
+                if response["content"]:
+                    content_item = response["content"][0]
+                    if "text" in content_item:
+                        # Try to parse as JSON if it looks like JSON
+                        text = content_item["text"]
+                        if text.strip().startswith(("{", "[")):
+                            try:
+                                return json.loads(text)
+                            except json.JSONDecodeError:
+                                pass
+                        
+                        # Parse structured text response
+                        return self._parse_text_response(text)
+                    
+            # If direct data is available, use it
+            if isinstance(response, dict) and any(key in response for key in ["key", "id", "summary", "issues"]):
+                return response
             
-            # Extract page ID and URL
-            import re
-            id_match = re.search(r'Page ID:\s*(\d+)', response_text)
-            if id_match:
-                page_data["id"] = id_match.group(1)
-            
-            url_match = re.search(r'URL:\s*(https?://[^\s]+)', response_text)
-            if url_match:
-                page_data["url"] = url_match.group(1)
-            
-            # Extract title if present
-            title_match = re.search(r'Title:\s*(.+)', response_text)
-            if title_match:
-                page_data["title"] = title_match.group(1).strip()
-            
-            return page_data
+            # Return the response as-is if we can't parse it
+            return response
             
         except Exception as e:
-            logger.error(f"Error parsing Confluence page response: {str(e)}")
+            logger.error(f"Error parsing tool response: {str(e)}")
             return {}
     
-    def _parse_confluence_search_response(self, response_text: str) -> List[Dict[str, Any]]:
-        """Parse Confluence search response from MCP"""
+    def _parse_text_response(self, text: str) -> Dict[str, Any]:
+        """Parse text response from MCP tools"""
         try:
-            pages = []
+            data = {}
+            lines = text.split('\n')
             
-            # Split response by pages (assuming each page has an ID or title)
-            import re
-            page_blocks = re.split(r'\n(?=Page ID:|Title:)', response_text)
+            for line in lines:
+                line = line.strip()
+                if ':' in line and not line.startswith('http'):
+                    key, value = line.split(':', 1)
+                    key = key.strip().lower().replace(' ', '_')
+                    value = value.strip()
+                    
+                    # Handle common field mappings
+                    if key in ['key', 'issue_key']:
+                        data['key'] = value
+                    elif key in ['id', 'issue_id']:
+                        data['id'] = value
+                    elif key in ['summary', 'title']:
+                        data['summary'] = value
+                    elif key in ['status']:
+                        data['status'] = value
+                    elif key in ['priority']:
+                        data['priority'] = value
+                    elif key in ['description']:
+                        data['description'] = value
+                    elif key in ['assignee']:
+                        data['assignee'] = value
+                    elif key in ['labels']:
+                        data['labels'] = [label.strip() for label in value.split(',') if label.strip()]
             
-            for block in page_blocks:
-                if not block.strip():
-                    continue
-                
-                page_data = self._parse_confluence_page_response(block)
-                if page_data and (page_data.get("id") or page_data.get("title")):
-                    pages.append(page_data)
-            
-            return pages
+            return data
             
         except Exception as e:
-            logger.error(f"Error parsing Confluence search response: {str(e)}")
-            return []
-    
-    def _parse_confluence_spaces_response(self, response_text: str) -> List[Dict[str, Any]]:
-        """Parse Confluence spaces response from MCP"""
-        try:
-            spaces = []
-            
-            # Extract space information
-            import re
-            space_blocks = re.split(r'\n(?=Space:)', response_text)
-            
-            for block in space_blocks:
-                if not block.strip():
-                    continue
-                
-                space_data = {}
-                
-                # Extract space key
-                key_match = re.search(r'Key:\s*([A-Z0-9]+)', block)
-                if key_match:
-                    space_data["key"] = key_match.group(1)
-                
-                # Extract space name
-                name_match = re.search(r'Name:\s*(.+)', block)
-                if name_match:
-                    space_data["name"] = name_match.group(1).strip()
-                
-                if space_data.get("key"):
-                    spaces.append(space_data)
-            
-            return spaces
-            
-        except Exception as e:
-            logger.error(f"Error parsing Confluence spaces response: {str(e)}")
-            return []
+            logger.error(f"Error parsing text response: {str(e)}")
+            return {}
     
     async def validate_connection(self) -> bool:
         """
@@ -640,14 +495,14 @@ class JiraService:
             True if connection is valid, False otherwise
         """
         try:
-            # Try to make a simple call to validate the connection
+            # Try to make a simple search to validate the connection
             test_args = {"jql": "project IS NOT EMPTY", "max_results": 1}
             await self._call_mcp_tool("jira_search", test_args)
-            logger.info("Atlassian MCP connection validated successfully")
+            logger.info("MCP Atlassian connection validated successfully")
             return True
             
         except Exception as e:
-            logger.error(f"Atlassian MCP connection validation failed: {str(e)}")
+            logger.error(f"MCP Atlassian connection validation failed: {str(e)}")
             return False
     
     async def close(self):

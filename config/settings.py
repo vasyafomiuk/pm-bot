@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from typing import Optional, List
 
 load_dotenv()
@@ -42,11 +42,16 @@ class Settings(BaseSettings):
     jira_api_token: str = os.getenv("JIRA_API_TOKEN", "")
     jira_project_key: str = os.getenv("JIRA_PROJECT_KEY", "")
     
+    # Confluence Configuration
+    confluence_url: Optional[str] = os.getenv("CONFLUENCE_URL")
+    
     # Atlassian MCP Configuration
     mcp_server_url: str = os.getenv("MCP_SERVER_URL", "http://mcp-atlassian:9000")
+    mcp_log_level: str = os.getenv("MCP_LOG_LEVEL", "INFO")
     atlassian_oauth_token: Optional[str] = os.getenv("ATLASSIAN_OAUTH_TOKEN")
     atlassian_oauth_client_id: Optional[str] = os.getenv("ATLASSIAN_OAUTH_CLIENT_ID")
     atlassian_oauth_client_secret: Optional[str] = os.getenv("ATLASSIAN_OAUTH_CLIENT_SECRET")
+    atlassian_oauth_scope: str = os.getenv("ATLASSIAN_OAUTH_SCOPE", "read:jira-work write:jira-work read:confluence-content.all write:confluence-content")
     atlassian_cloud_id: Optional[str] = os.getenv("ATLASSIAN_CLOUD_ID")
     
     # Application Configuration

@@ -1,0 +1,95 @@
+# ==============================================================================
+# PROJECT MANAGEMENT BOT - ENVIRONMENT CONFIGURATION TEMPLATE
+# ==============================================================================
+# Copy this file to .env and fill in your actual values
+# Command: cp environment.template.txt .env
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SLACK CONFIGURATION
+# ------------------------------------------------------------------------------
+SLACK_BOT_TOKEN=xoxb-your-bot-token-here
+SLACK_SIGNING_SECRET=your-signing-secret-here
+SLACK_APP_TOKEN=xapp-your-app-token-here
+
+# ------------------------------------------------------------------------------
+# OPENAI CONFIGURATION
+# ------------------------------------------------------------------------------
+OPENAI_API_KEY=sk-your-openai-api-key-here
+OPENAI_MODEL=gpt-4
+
+# ------------------------------------------------------------------------------
+# AZURE OPENAI CONFIGURATION (Optional - alternative to OpenAI)
+# ------------------------------------------------------------------------------
+USE_AZURE_OPENAI=false
+AZURE_OPENAI_ENDPOINT=
+AZURE_OPENAI_API_KEY=
+AZURE_OPENAI_API_VERSION=2024-02-15-preview
+AZURE_OPENAI_DEPLOYMENT=
+
+# ------------------------------------------------------------------------------
+# AI AGENT CONFIGURATION
+# ------------------------------------------------------------------------------
+AGENT_MAX_ITERATIONS=5
+AGENT_TEMPERATURE=0.7
+
+# ------------------------------------------------------------------------------
+# JIRA/ATLASSIAN CONFIGURATION
+# ------------------------------------------------------------------------------
+JIRA_SERVER=https://your-company.atlassian.net
+JIRA_USERNAME=your-email@company.com
+JIRA_API_TOKEN=your-jira-api-token
+JIRA_PROJECT_KEY=PROJ
+
+# Confluence Configuration (usually same as JIRA_SERVER + /wiki)
+CONFLUENCE_URL=https://your-company.atlassian.net/wiki
+
+# ------------------------------------------------------------------------------
+# ATLASSIAN OAUTH CONFIGURATION (Optional - for enhanced integration)
+# ------------------------------------------------------------------------------
+ATLASSIAN_OAUTH_CLIENT_ID=
+ATLASSIAN_OAUTH_CLIENT_SECRET=
+ATLASSIAN_OAUTH_TOKEN=
+ATLASSIAN_OAUTH_SCOPE=read:jira-work write:jira-work read:confluence-content.all write:confluence-content
+ATLASSIAN_CLOUD_ID=
+
+# ------------------------------------------------------------------------------
+# GOOGLE MEET/CALENDAR CONFIGURATION
+# ------------------------------------------------------------------------------
+GOOGLE_CREDENTIALS_FILE=credentials.json
+GOOGLE_TOKEN_FILE=token.json
+GOOGLE_MEETING_LOOKBACK_DAYS=7
+
+# ------------------------------------------------------------------------------
+# APPLICATION CONFIGURATION
+# ------------------------------------------------------------------------------
+PORT=3000
+LOG_LEVEL=INFO
+MCP_LOG_LEVEL=INFO
+
+# ------------------------------------------------------------------------------
+# DEVELOPMENT/DOCKER CONFIGURATION
+# ------------------------------------------------------------------------------
+# The following variables are set by docker-compose and typically don't need to be changed:
+# MCP_SERVER_URL=http://mcp-atlassian:9000
+
+# ==============================================================================
+# SETUP INSTRUCTIONS
+# ==============================================================================
+# 1. Copy this file to .env:
+#    cp environment.template.txt .env
+#
+# 2. Edit .env and replace all placeholder values with your actual credentials
+#
+# 3. Required for basic functionality:
+#    - SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SLACK_APP_TOKEN
+#    - OPENAI_API_KEY (or Azure OpenAI credentials)
+#    - JIRA_SERVER, JIRA_USERNAME, JIRA_API_TOKEN, JIRA_PROJECT_KEY
+#
+# 4. Optional for enhanced features:
+#    - Google credentials for meeting processing
+#    - Atlassian OAuth for advanced integrations
+#
+# 5. Start the application:
+#    docker-compose up -d
+# ============================================================================== 

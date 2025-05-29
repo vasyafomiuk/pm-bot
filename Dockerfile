@@ -4,24 +4,26 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    UV_CACHE_DIR=/tmp/uv-cache
 
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies and uv
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         curl \
-        && rm -rf /var/lib/apt/lists/*
+        && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir uv
 
-# Copy requirements first to leverage Docker cache
+# Copy dependency files first to leverage Docker cache
+COPY pyproject.toml .
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies using uv (much faster than pip)
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Copy application code
 COPY . .

@@ -1,262 +1,131 @@
 #!/bin/bash
 
-# Docker management script for Project Management Bot
+# Legacy Docker Runner - Redirects to New Scripts
+# This script has been replaced with improved Docker management tools
+
 set -e
 
 # Colors for output
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configuration
-IMAGE_NAME="pm-bot"
-CONTAINER_NAME="project-management-bot"
-ENV_FILE=".env"
+echo -e "${YELLOW}🔄 docker-run.sh has been upgraded!${NC}"
+echo ""
+echo -e "${BLUE}New Docker Scripts Available:${NC}"
+echo ""
+echo -e "${GREEN}For Quick Start:${NC}"
+echo "  ./quick_docker_start.sh          # One-command setup and run"
+echo ""
+echo -e "${GREEN}For Advanced Control:${NC}"
+echo "  ./run_docker.sh --help           # Advanced Docker management"
+echo "  ./run_docker.sh --mode minimal --build"
+echo ""
+echo -e "${GREEN}For Docker Compose:${NC}"
+echo "  ./docker_compose_run.sh up       # Service management"
+echo ""
+echo -e "${BLUE}Legacy Command Mapping:${NC}"
 
-# Function to print colored output
-print_status() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-print_header() {
-    echo -e "${BLUE}==== $1 ====${NC}"
-}
-
-# Function to check if .env file exists
-check_env_file() {
-    if [ ! -f "$ENV_FILE" ]; then
-        print_error ".env file not found. Please create one from env.example"
-        print_status "Running: cp env.example .env"
-        cp env.example .env
-        print_warning "Please edit .env file with your configuration before running the bot"
-        exit 1
-    fi
-}
-
-# Function to build the Docker image
-build() {
-    print_header "Building Docker Image"
-    docker build -t $IMAGE_NAME .
-    print_status "Build completed successfully"
-}
-
-# Function to run the container
-run() {
-    print_header "Starting Project Management Bot"
-    check_env_file
-    
-    # Stop existing container if running
-    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
-        print_status "Stopping existing container..."
-        docker stop $CONTAINER_NAME
-    fi
-    
-    # Remove existing container if exists
-    if [ "$(docker ps -aq -f name=$CONTAINER_NAME)" ]; then
-        print_status "Removing existing container..."
-        docker rm $CONTAINER_NAME
-    fi
-    
-    # Create logs directory
-    mkdir -p logs
-    
-    # Run new container
-    docker run -d \
-        --name $CONTAINER_NAME \
-        --env-file $ENV_FILE \
-        -v "$(pwd)/logs:/app/logs:rw" \
-        --restart unless-stopped \
-        $IMAGE_NAME
-    
-    print_status "Container started successfully"
-    print_status "Container name: $CONTAINER_NAME"
-    print_status "View logs with: $0 logs"
-}
-
-# Function to run with docker-compose
-compose_up() {
-    print_header "Starting with Docker Compose"
-    check_env_file
-    docker-compose up -d
-    print_status "Services started with docker-compose"
-}
-
-# Function to stop with docker-compose
-compose_down() {
-    print_header "Stopping Docker Compose Services"
-    docker-compose down
-    print_status "Services stopped"
-}
-
-# Function to run in test mode
-test() {
-    print_header "Running in Test Mode"
-    check_env_file
-    
-    docker run --rm \
-        --env-file $ENV_FILE \
-        -v "$(pwd)/logs:/app/logs:rw" \
-        $IMAGE_NAME test
-}
-
-# Function to show logs
-logs() {
-    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
-        docker logs -f $CONTAINER_NAME
-    else
-        print_error "Container $CONTAINER_NAME is not running"
-        exit 1
-    fi
-}
-
-# Function to show container status
-status() {
-    print_header "Container Status"
-    
-    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
-        print_status "Container is running"
-        docker ps -f name=$CONTAINER_NAME
-        echo ""
-        print_status "Container health:"
-        docker exec $CONTAINER_NAME ./docker-entrypoint.sh health
-    elif [ "$(docker ps -aq -f name=$CONTAINER_NAME)" ]; then
-        print_warning "Container exists but is not running"
-        docker ps -a -f name=$CONTAINER_NAME
-    else
-        print_warning "Container does not exist"
-    fi
-}
-
-# Function to stop the container
-stop() {
-    print_header "Stopping Container"
-    
-    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
-        docker stop $CONTAINER_NAME
-        print_status "Container stopped"
-    else
-        print_warning "Container is not running"
-    fi
-}
-
-# Function to restart the container
-restart() {
-    print_header "Restarting Container"
-    stop
-    sleep 2
-    run
-}
-
-# Function to enter the container shell
-shell() {
-    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
-        docker exec -it $CONTAINER_NAME /bin/bash
-    else
-        print_error "Container $CONTAINER_NAME is not running"
-        exit 1
-    fi
-}
-
-# Function to clean up
-clean() {
-    print_header "Cleaning Up"
-    
-    # Stop and remove container
-    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
-        docker stop $CONTAINER_NAME
-    fi
-    
-    if [ "$(docker ps -aq -f name=$CONTAINER_NAME)" ]; then
-        docker rm $CONTAINER_NAME
-    fi
-    
-    # Remove image
-    if [ "$(docker images -q $IMAGE_NAME)" ]; then
-        print_status "Removing Docker image..."
-        docker rmi $IMAGE_NAME
-    fi
-    
-    print_status "Cleanup completed"
-}
-
-# Function to show help
-help() {
-    echo "Project Management Bot - Docker Management Script"
-    echo ""
-    echo "Usage: $0 [COMMAND]"
-    echo ""
-    echo "Commands:"
-    echo "  build      Build the Docker image"
-    echo "  run        Run the container"
-    echo "  compose    Start with docker-compose"
-    echo "  down       Stop docker-compose services"
-    echo "  test       Run in test mode"
-    echo "  logs       Show container logs"
-    echo "  status     Show container status"
-    echo "  stop       Stop the container"
-    echo "  restart    Restart the container"
-    echo "  shell      Enter container shell"
-    echo "  clean      Remove container and image"
-    echo "  help       Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  $0 build && $0 run    # Build and run"
-    echo "  $0 logs               # Follow logs"
-    echo "  $0 test               # Test configuration"
-    echo ""
-}
-
-# Main script logic
 case "${1:-help}" in
     build)
-        build
+        echo "Legacy: ./docker-run.sh build"
+        echo "New:    ./run_docker.sh --build --mode minimal"
+        echo ""
+        echo "Running new command..."
+        exec ./run_docker.sh --build --mode minimal
         ;;
     run)
-        run
+        echo "Legacy: ./docker-run.sh run"
+        echo "New:    ./run_docker.sh --mode minimal"
+        echo ""
+        echo "Running new command..."
+        exec ./run_docker.sh --mode minimal
         ;;
     compose)
-        compose_up
+        echo "Legacy: ./docker-run.sh compose"
+        echo "New:    ./docker_compose_run.sh up"
+        echo ""
+        echo "Running new command..."
+        exec ./docker_compose_run.sh up
         ;;
     down)
-        compose_down
+        echo "Legacy: ./docker-run.sh down"
+        echo "New:    ./docker_compose_run.sh down"
+        echo ""
+        echo "Running new command..."
+        exec ./docker_compose_run.sh down
         ;;
     test)
-        test
+        echo "Legacy: ./docker-run.sh test"
+        echo "New:    ./run_docker.sh --mode test"
+        echo ""
+        echo "Running new command..."
+        exec ./run_docker.sh --mode test
         ;;
     logs)
-        logs
+        echo "Legacy: ./docker-run.sh logs"
+        echo "New:    ./run_docker.sh --logs"
+        echo ""
+        echo "Running new command..."
+        exec ./run_docker.sh --logs
         ;;
     status)
-        status
+        echo "Legacy: ./docker-run.sh status"
+        echo "New:    docker ps --filter name=pm-bot"
+        echo ""
+        echo "Running new command..."
+        docker ps --filter name=pm-bot
         ;;
     stop)
-        stop
+        echo "Legacy: ./docker-run.sh stop"
+        echo "New:    ./run_docker.sh --stop"
+        echo ""
+        echo "Running new command..."
+        exec ./run_docker.sh --stop
         ;;
     restart)
-        restart
+        echo "Legacy: ./docker-run.sh restart"
+        echo "New:    ./run_docker.sh --stop && ./run_docker.sh --mode minimal"
+        echo ""
+        echo "Running new commands..."
+        ./run_docker.sh --stop
+        exec ./run_docker.sh --mode minimal
         ;;
     shell)
-        shell
+        echo "Legacy: ./docker-run.sh shell"
+        echo "New:    docker exec -it pm-bot /bin/bash"
+        echo ""
+        echo "Running new command..."
+        exec docker exec -it pm-bot /bin/bash
         ;;
     clean)
-        clean
+        echo "Legacy: ./docker-run.sh clean"
+        echo "New:    ./run_docker.sh --stop && docker rmi pm-bot:latest"
+        echo ""
+        echo "Running new commands..."
+        ./run_docker.sh --stop
+        docker rmi pm-bot:latest 2>/dev/null || echo "Image not found"
         ;;
-    help|--help|-h)
-        help
-        ;;
-    *)
-        print_error "Unknown command: $1"
-        help
-        exit 1
+    help|--help|-h|*)
+        echo ""
+        echo -e "${BLUE}📚 Recommended Usage:${NC}"
+        echo ""
+        echo -e "${GREEN}Quick Start (Recommended):${NC}"
+        echo "  ./quick_docker_start.sh"
+        echo ""
+        echo -e "${GREEN}Development:${NC}"
+        echo "  ./run_docker.sh --mode minimal --build"
+        echo "  ./run_docker.sh --logs"
+        echo "  ./run_docker.sh --stop"
+        echo ""
+        echo -e "${GREEN}Production:${NC}"
+        echo "  ./docker_compose_run.sh up"
+        echo "  ./docker_compose_run.sh logs"
+        echo "  ./docker_compose_run.sh down"
+        echo ""
+        echo -e "${BLUE}For detailed Docker instructions:${NC}"
+        echo "  See DOCKER_GUIDE.md"
+        echo ""
         ;;
 esac 

@@ -11,6 +11,7 @@ import os
 import sys
 import signal
 import asyncio
+import argparse
 from typing import Optional
 
 from config import settings
@@ -43,28 +44,48 @@ def setup_logging():
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 
-def validate_configuration():
+def validate_configuration(skip_optional=False):
     """Validate required configuration"""
-    required_settings = [
+    # Essential credentials (always required)
+    essential_settings = [
         ('SLACK_BOT_TOKEN', settings.slack_bot_token),
         ('SLACK_SIGNING_SECRET', settings.slack_signing_secret),
         ('SLACK_APP_TOKEN', settings.slack_app_token),
         ('OPENAI_API_KEY', settings.openai_api_key),
+    ]
+    
+    # Optional credentials (only required if not skipping validation)
+    optional_settings = [
         ('JIRA_SERVER', settings.jira_server),
         ('JIRA_USERNAME', settings.jira_username),
         ('JIRA_API_TOKEN', settings.jira_api_token),
         ('JIRA_PROJECT_KEY', settings.jira_project_key),
     ]
     
-    missing_settings = []
-    for name, value in required_settings:
+    # Check essential settings
+    missing_essential = []
+    for name, value in essential_settings:
         if not value:
-            missing_settings.append(name)
+            missing_essential.append(name)
     
-    if missing_settings:
-        logger.error(f"Missing required configuration: {', '.join(missing_settings)}")
-        logger.error("Please check your .env file or environment variables")
+    if missing_essential:
+        logger.error(f"Missing essential configuration: {', '.join(missing_essential)}")
+        logger.error("Please check your .env file for Slack and OpenAI credentials")
         return False
+    
+    # Check optional settings only if not skipping validation
+    if not skip_optional:
+        missing_optional = []
+        for name, value in optional_settings:
+            if not value:
+                missing_optional.append(name)
+        
+        if missing_optional:
+            logger.error(f"Missing optional configuration: {', '.join(missing_optional)}")
+            logger.error("Use --skip-validation to run with minimal credentials, or configure Jira settings")
+            return False
+    else:
+        logger.info("Running with minimal configuration (Slack + OpenAI only)")
     
     return True
 
@@ -72,9 +93,10 @@ def validate_configuration():
 class PMBotApplication:
     """Main application class"""
     
-    def __init__(self):
+    def __init__(self, skip_validation=False):
         self.project_manager: Optional[ProjectManager] = None
         self.logger = logging.getLogger(__name__)
+        self.skip_validation = skip_validation
     
     async def initialize(self) -> bool:
         """Initialize the application"""
@@ -82,25 +104,29 @@ class PMBotApplication:
             self.logger.info("Initializing Project Management Bot...")
             
             # Validate configuration
-            if not validate_configuration():
+            if not validate_configuration(skip_optional=self.skip_validation):
                 return False
             
             # Initialize project manager
             self.project_manager = ProjectManager()
             
-            # Validate services
-            validation_results = await self.project_manager.validate_services()
+            # Validate services (skip if using minimal configuration)
+            if not self.skip_validation:
+                validation_results = await self.project_manager.validate_services()
+                
+                failed_services = [
+                    service for service, status in validation_results.items() 
+                    if not status
+                ]
+                
+                if failed_services:
+                    self.logger.error(f"Service validation failed for: {', '.join(failed_services)}")
+                    return False
+                
+                self.logger.info("All services validated successfully")
+            else:
+                self.logger.info("Service validation skipped - running with minimal configuration")
             
-            failed_services = [
-                service for service, status in validation_results.items() 
-                if not status
-            ]
-            
-            if failed_services:
-                self.logger.error(f"Service validation failed for: {', '.join(failed_services)}")
-                return False
-            
-            self.logger.info("All services validated successfully")
             return True
             
         except Exception as e:
@@ -186,6 +212,15 @@ async def test_epic_creation():
 
 def main():
     """Main entry point"""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Project Management Bot')
+    parser.add_argument('--skip-validation', action='store_true', 
+                       help='Skip optional service validation (run with minimal credentials)')
+    parser.add_argument('command', nargs='?', choices=['test'], 
+                       help='Special commands (test for epic creation test)')
+    
+    args = parser.parse_args()
+    
     setup_logging()
     
     global logger
@@ -196,13 +231,13 @@ def main():
     logger.info("=" * 60)
     
     # Check if running in test mode
-    if len(sys.argv) > 1 and sys.argv[1] == "test":
+    if args.command == "test":
         logger.info("Running in test mode...")
         asyncio.run(test_epic_creation())
         return
     
     # Run the main application
-    app = PMBotApplication()
+    app = PMBotApplication(skip_validation=args.skip_validation)
     app.run()
 
 

@@ -1,137 +1,50 @@
 version: '3.8'
 
 services:
-  # Atlassian MCP Server
-  mcp-atlassian:
-    image: ghcr.io/sooperset/mcp-atlassian:latest
-    container_name: mcp-atlassian
-    restart: unless-stopped
-    ports:
-      - "9000:9000"
-    environment:
-      # Jira/Confluence URLs
-      - JIRA_URL=${JIRA_SERVER}
-      - CONFLUENCE_URL=${CONFLUENCE_URL:-${JIRA_SERVER}/wiki}
-      
-      # Authentication for MCP server fallback
-      - JIRA_USERNAME=${JIRA_USERNAME}
-      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
-      - CONFLUENCE_USERNAME=${JIRA_USERNAME}
-      - CONFLUENCE_API_TOKEN=${JIRA_API_TOKEN}
-      
-      # OAuth Configuration (optional)
-      - ATLASSIAN_OAUTH_CLIENT_ID=${ATLASSIAN_OAUTH_CLIENT_ID:-}
-      - ATLASSIAN_OAUTH_CLIENT_SECRET=${ATLASSIAN_OAUTH_CLIENT_SECRET:-}
-      - ATLASSIAN_OAUTH_REDIRECT_URI=http://localhost:8080/callback
-      - ATLASSIAN_OAUTH_SCOPE=${ATLASSIAN_OAUTH_SCOPE:-read:jira-work write:jira-work}
-      - ATLASSIAN_CLOUD_ID=${ATLASSIAN_CLOUD_ID:-}
-      
-      # Server Configuration
-      - LOG_LEVEL=${MCP_LOG_LEVEL:-INFO}
-    command: ["--transport", "streamable-http", "--port", "9000", "-vv"]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    networks:
-      - pm-bot-network
-
-  # Project Management Bot
   pm-bot:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: project-management-bot
+    container_name: pm-bot
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./logs:/app/logs
+      - ./.env:/app/.env
     restart: unless-stopped
+    command: ["python3", "main.py", "--skip-validation"]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MCP_SERVER_URL=http://mcp-atlassian:9000
     depends_on:
       - mcp-atlassian
-    environment:
-      # Slack Configuration
-      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
-      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET}
-      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
-      
-      # OpenAI Configuration
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4}
-      
-      # Azure OpenAI Configuration (optional)
-      - USE_AZURE_OPENAI=${USE_AZURE_OPENAI:-false}
-      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
-      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
-      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
-      
-      # AI Agent Configuration
-      - AGENT_MAX_ITERATIONS=${AGENT_MAX_ITERATIONS:-5}
-      - AGENT_TEMPERATURE=${AGENT_TEMPERATURE:-0.7}
-      
-      # Google Meet/Calendar Configuration
-      - GOOGLE_CREDENTIALS_FILE=${GOOGLE_CREDENTIALS_FILE:-credentials.json}
-      - GOOGLE_TOKEN_FILE=${GOOGLE_TOKEN_FILE:-token.json}
-      - GOOGLE_MEETING_LOOKBACK_DAYS=${GOOGLE_MEETING_LOOKBACK_DAYS:-7}
-      
-      # Jira Configuration
-      - JIRA_SERVER=${JIRA_SERVER}
-      - JIRA_USERNAME=${JIRA_USERNAME}
-      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
-      - JIRA_PROJECT_KEY=${JIRA_PROJECT_KEY}
-      
-      # Atlassian MCP Configuration
-      - MCP_SERVER_URL=http://mcp-atlassian:9000
-      - ATLASSIAN_OAUTH_TOKEN=${ATLASSIAN_OAUTH_TOKEN:-}
-      - ATLASSIAN_OAUTH_CLIENT_ID=${ATLASSIAN_OAUTH_CLIENT_ID:-}
-      - ATLASSIAN_OAUTH_CLIENT_SECRET=${ATLASSIAN_OAUTH_CLIENT_SECRET:-}
-      - ATLASSIAN_CLOUD_ID=${ATLASSIAN_CLOUD_ID:-}
-      
-      # Application Configuration
-      - PORT=${PORT:-3000}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    volumes:
-      # Mount logs directory for persistence
-      - ./logs:/app/logs:rw
-      # Mount config for development (optional)
-      - ./config:/app/config:ro
-      # Mount Google credentials (if they exist)
-      - ./credentials.json:/app/credentials.json:ro
-      - ./token.json:/app/token.json:rw
     networks:
       - pm-bot-network
-    # Health check
-    healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    # Resource limits
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
-
-  # Optional: Redis for caching (if needed in future)
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: pm-bot-redis
-  #   restart: unless-stopped
-  #   volumes:
-  #     - redis_data:/data
-  #   networks:
-  #     - pm-bot-network
-  #   command: redis-server --appendonly yes
+  mcp-atlassian:
+    image: ghcr.io/sooperset/mcp-atlassian:latest
+    container_name: mcp-atlassian
+    ports:
+      - "9000:9000"
+    environment:
+      - JIRA_URL=${JIRA_SERVER}
+      - JIRA_USERNAME=${JIRA_USERNAME}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+      - CONFLUENCE_URL=${CONFLUENCE_URL}
+      - LOG_LEVEL=${MCP_LOG_LEVEL:-INFO}
+    command: ["--transport", "streamable-http", "--port", "9000", "-vv"]
+    networks:
+      - pm-bot-network
+    restart: unless-stopped
 
 networks:
   pm-bot-network:
     driver: bridge
 
 volumes:
+  pm-bot-logs:
+    driver: local
   # Uncomment if using Redis
   # redis_data:
   logs: 

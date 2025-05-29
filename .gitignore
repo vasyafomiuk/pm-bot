@@ -109,6 +109,11 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.venv/
+
+# UV package manager
+.uv-cache/
+uv.lock
 
 # Spyder project settings
 .spyderproject
@@ -129,21 +134,34 @@ dmypy.json
 .pyre/
 
 # Project specific
-pm_bot.log
+credentials.json
+token.json
 *.log
 logs/
+.DS_Store
+Thumbs.db
 
-# Docker (keep the configuration files)
-# Dockerfile - keep
-# docker-compose.yml - keep
-# .dockerignore - keep
+# Docker
+.dockerignore
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# OS
+# OS generated files
 .DS_Store
-Thumbs.db 
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
+.tmp/
