@@ -22,9 +22,9 @@ You'll need to obtain three tokens:
 
 | Token | Purpose | Format | Example |
 |-------|---------|--------|---------|
-| **Bot User OAuth Token** | API access for the bot | `xoxb-...` | `xoxb-1234567890-1234567890-abcdefghijklmnop` |
-| **Signing Secret** | Verify requests from Slack | 32 hex chars | `1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d` |
-| **App-Level Token** | Socket Mode connection | `xapp-...` | `xapp-1-A01234567-1234567890-abcdef` |
+| **Bot User OAuth Token** | API access for the bot | `xoxb-...` | 
+| **Signing Secret** | Verify requests from Slack | 32 hex chars | 
+| **App-Level Token** | Socket Mode connection | `xapp-...` | 
 
 ## Step 1: Create a Slack App
 
